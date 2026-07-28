@@ -1,0 +1,16 @@
+# Keep this file aligned with the runtime dependencies in pyproject.toml.
+anthropic>=0.40,<1
+boto3>=1.35,<2
+faiss-cpu>=1.9,<2
+fastapi>=0.115,<1
+langchain>=0.3,<2
+langchain-anthropic>=0.3,<2
+langchain-aws>=0.2,<2
+langchain-community>=0.3,<2
+langchain-openai>=0.3,<2
+langgraph>=0.2,<2
+mcp>=1,<2
+openai>=1.58,<3
+pydantic-settings>=2.7,<3
+uvicorn[standard]>=0.34,<1
+

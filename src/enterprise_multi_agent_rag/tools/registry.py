@@ -1,0 +1,2 @@
+"""Tool registration boundary."""
+
