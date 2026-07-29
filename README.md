@@ -6,9 +6,9 @@ coordinate specialized agents with LangGraph, retrieve enterprise knowledge,
 support multiple model providers, expose a FastAPI API and MCP server, and run
 in containerized AWS infrastructure.
 
-This initial foundation intentionally contains no RAG, agent, provider, or MCP
-behavior. It establishes package boundaries, configuration, logging, a health
-endpoint, and test infrastructure on Python 3.11.
+The current foundation establishes package boundaries, configuration, logging,
+a health endpoint, test infrastructure, and local document loading on Python
+3.11.
 
 ## Architecture
 
@@ -68,8 +68,26 @@ Run tests:
 pytest
 ```
 
+## Document ingestion
+
+The ingestion layer validates a local file and converts it to one consistent
+`IngestedDocument` model. It supports PDF (`.pdf`), UTF-8 plain text (`.txt`),
+and UTF-8 Markdown (`.md`). Document IDs are deterministic SHA-256 hashes of
+the original file bytes.
+
+```python
+from enterprise_multi_agent_rag.ingestion import DocumentLoader
+
+document = DocumentLoader().load("documents/handbook.pdf")
+print(document.document_id, document.metadata["page_count"])
+```
+
+This milestone handles local loading and text extraction only. It does not
+perform OCR on scanned or image-only PDFs, preserve PDF layout, accept uploads,
+chunk content, create embeddings, store vectors, retrieve documents, or run
+chains, graphs, or agents.
+
 ## Planned technology
 
 LangChain, LangGraph, OpenAI, Anthropic Claude, Amazon Bedrock, FastAPI, FAISS,
 MCP, Docker, GitHub Actions, and AWS.
-
