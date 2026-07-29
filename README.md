@@ -7,8 +7,8 @@ support multiple model providers, expose a FastAPI API and MCP server, and run
 in containerized AWS infrastructure.
 
 The current foundation establishes package boundaries, configuration, logging,
-a health endpoint, test infrastructure, and local document loading on Python
-3.11.
+a health endpoint, test infrastructure, local document loading, and document
+chunking on Python 3.11.
 
 ## Architecture
 
@@ -82,10 +82,31 @@ document = DocumentLoader().load("documents/handbook.pdf")
 print(document.document_id, document.metadata["page_count"])
 ```
 
-This milestone handles local loading and text extraction only. It does not
-perform OCR on scanned or image-only PDFs, preserve PDF layout, accept uploads,
-chunk content, create embeddings, store vectors, retrieve documents, or run
-chains, graphs, or agents.
+Document ingestion does not perform OCR on scanned or image-only PDFs or
+preserve PDF layout.
+
+## Document chunking
+
+Chunking divides an `IngestedDocument` into smaller `DocumentChunk` objects
+that retain their relationship to the source. Overlap repeats a small amount of
+neighboring text so that context near a chunk boundary is not isolated. The
+default configuration is 1,000 characters per chunk with 200 characters of
+overlap.
+
+```python
+from enterprise_multi_agent_rag.chunking import DocumentChunker
+from enterprise_multi_agent_rag.ingestion import DocumentLoader
+
+document = DocumentLoader().load("documents/handbook.md")
+chunks = DocumentChunker(chunk_size=1000, chunk_overlap=200).chunk(document)
+print(chunks[0].chunk_id, chunks[0].metadata["total_chunks"])
+```
+
+Chunk content is not summarized or normalized. Character offsets use exact,
+forward, overlap-aware substring matching against the original text. An offset
+is `None` if an exact location cannot be established safely. This layer does
+not provide token-aware splitting, semantic splitting, embeddings, persistence,
+vector storage, retrieval, uploads, chains, graphs, or agents.
 
 ## Planned technology
 
