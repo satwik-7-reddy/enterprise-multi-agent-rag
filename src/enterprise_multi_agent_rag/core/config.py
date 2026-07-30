@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "staging", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
+    llm_provider: str = "openai"
+    openai_chat_model: str = "gpt-4o-mini"
+    bedrock_chat_model_id: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    llm_max_tokens: int = 1024
     embedding_provider: str = "bedrock"
     aws_region: str = "us-east-1"
     bedrock_embedding_model: str = "amazon.titan-embed-text-v2:0"

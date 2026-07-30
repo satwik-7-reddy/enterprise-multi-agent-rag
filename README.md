@@ -25,19 +25,19 @@ EmbeddedChunk[]
   ↓
 FAISSVectorStore
 
-Question retrieval flow:
+Question answering flow:
 
 User question
   ↓
+RAGService
+  ↓
 Retriever
   ↓
-Embedding provider
+PromptBuilder
   ↓
-Query embedding
+LLMService
   ↓
-FAISSVectorStore
-  ↓
-SearchResult[]
+Generated Answer
 ```
 
 The source package is organized by responsibility:
@@ -207,6 +207,74 @@ The retriever coordinates embedding and search only; it does not generate a
 final answer, rewrite the query, rerank results, or format citations. Stored
 document chunks and questions must use the same embedding model, dimensions,
 and normalization configuration.
+
+## Prompt Builder
+
+The user provides only a natural-language question, while the retriever
+provides the relevant ranked chunks. `PromptBuilder` combines both into the
+final string intended for a future LLM service:
+
+```python
+from enterprise_multi_agent_rag.generation import PromptBuilder
+
+prompt = PromptBuilder().build(question, results)
+```
+
+Each chunk is numbered and included in retriever order. The prompt instructs
+the future model to answer only from the retrieved context and acknowledge when
+the context is insufficient. `PromptBuilder` formats text only—it does not call
+the retriever, embedding provider, vector store, or LLM.
+
+## LLM Service
+
+`PromptBuilder` creates the final grounded prompt, then `LLMService` sends that
+prompt unchanged to the configured model and returns only its generated answer
+text. OpenAI chat completions and AWS Bedrock Claude messages are supported.
+
+Select the provider and model in `.env`:
+
+```dotenv
+LLM_PROVIDER=openai
+OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_API_KEY=replace-with-a-local-secret
+
+# Or use Bedrock with credentials discovered by Boto3:
+# LLM_PROVIDER=bedrock
+# BEDROCK_CHAT_MODEL_ID=anthropic.claude-3-5-sonnet-20240620-v1:0
+```
+
+```python
+from enterprise_multi_agent_rag.core.config import get_settings
+from enterprise_multi_agent_rag.generation import create_llm_service
+
+llm_service = create_llm_service(get_settings())
+answer = llm_service.generate(prompt)
+```
+
+The service performs no retrieval, prompt construction, streaming, memory,
+tool calling, or answer formatting. Unit tests use injected mocks and make no
+paid OpenAI or AWS requests.
+
+## RAG Service
+
+`RAGService` coordinates retrieval, prompt construction, and answer generation
+behind one method. It contains no embedding, search, formatting, or AI provider
+logic of its own; each existing component retains one responsibility.
+
+```python
+from enterprise_multi_agent_rag.generation import PromptBuilder, RAGService
+
+rag_service = RAGService(
+    retriever=retriever,
+    prompt_builder=PromptBuilder(),
+    llm_service=llm_service,
+)
+answer = rag_service.answer("How many vacation days are provided?", k=5)
+```
+
+Errors from the retriever, prompt builder, or LLM service propagate unchanged
+to the caller. No citations, memory, reranking, query rewriting, or answer
+post-processing are added by this coordinator.
 
 ## Planned technology
 
