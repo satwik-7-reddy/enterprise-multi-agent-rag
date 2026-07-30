@@ -20,13 +20,17 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "staging", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
+    embedding_provider: str = "bedrock"
+    aws_region: str = "us-east-1"
+    bedrock_embedding_model: str = "amazon.titan-embed-text-v2:0"
+    bedrock_embedding_dimensions: int = 1024
+    bedrock_embedding_normalize: bool = True
     openai_api_key: str | None = Field(default=None, repr=False)
+    openai_embedding_model: str = "text-embedding-3-small"
     anthropic_api_key: str | None = Field(default=None, repr=False)
-    aws_region: str | None = None
 
 
 @lru_cache
 def get_settings() -> Settings:
     """Return a cached settings instance."""
     return Settings()
-

@@ -7,27 +7,37 @@ support multiple model providers, expose a FastAPI API and MCP server, and run
 in containerized AWS infrastructure.
 
 The current foundation establishes package boundaries, configuration, logging,
-a health endpoint, test infrastructure, local document loading, and document
-chunking on Python 3.11.
+a health endpoint, test infrastructure, document processing, embedding
+generation, FAISS storage, and question retrieval on Python 3.11.
 
 ## Architecture
 
 ```text
-Clients
-  |
-  v
-FastAPI API ---- MCP server
-  |
-  v
-LangGraph workflow
-  |
-  +-- Agents
-  +-- Tools
-  +-- Retrieval ---- Document ingestion / FAISS
-  +-- LLM providers ---- OpenAI / Anthropic / Amazon Bedrock
-  |
-  v
-Evaluation and observability
+Document ingestion flow:
+
+Document
+  ↓
+Chunking
+  ↓
+EmbeddingService
+  ↓
+EmbeddedChunk[]
+  ↓
+FAISSVectorStore
+
+Question retrieval flow:
+
+User question
+  ↓
+Retriever
+  ↓
+Embedding provider
+  ↓
+Query embedding
+  ↓
+FAISSVectorStore
+  ↓
+SearchResult[]
 ```
 
 The source package is organized by responsibility:
@@ -104,9 +114,99 @@ print(chunks[0].chunk_id, chunks[0].metadata["total_chunks"])
 
 Chunk content is not summarized or normalized. Character offsets use exact,
 forward, overlap-aware substring matching against the original text. An offset
-is `None` if an exact location cannot be established safely. This layer does
-not provide token-aware splitting, semantic splitting, embeddings, persistence,
-vector storage, retrieval, uploads, chains, graphs, or agents.
+is `None` if an exact location cannot be established safely. The chunking layer
+does not provide token-aware or semantic splitting and does not alter the
+source content.
+
+## Embeddings
+
+Embeddings convert chunk text into numeric vectors for future similarity
+search. The embedding layer is provider-independent: `EmbeddingService`
+coordinates chunks through a `BaseEmbeddingProvider`, while provider classes
+own their native request and response formats. AWS Bedrock is the default,
+using `amazon.titan-embed-text-v2:0` with 1,024 normalized dimensions.
+
+Bedrock credentials are not stored or passed by this application. Boto3
+discovers them through its standard credential provider chain, including
+environment variables, shared AWS configuration, container roles, and EC2
+instance roles. Select a provider in `.env`:
+
+```dotenv
+EMBEDDING_PROVIDER=bedrock
+# or:
+EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=replace-with-a-local-secret
+```
+
+```python
+from enterprise_multi_agent_rag.chunking import DocumentChunker
+from enterprise_multi_agent_rag.core.config import get_settings
+from enterprise_multi_agent_rag.embeddings import (
+    EmbeddingService,
+    create_embedding_provider,
+)
+from enterprise_multi_agent_rag.ingestion import DocumentLoader
+
+document = DocumentLoader().load("documents/handbook.md")
+chunks = DocumentChunker().chunk(document)
+provider = create_embedding_provider(get_settings())
+embedded_chunks = EmbeddingService(provider).embed_chunks(chunks)
+```
+
+Embeddings from different providers, models, dimensions, or normalization
+settings must not be mixed in the same FAISS index. Native Titan V2
+requests accept one text input, so Bedrock currently makes one request per
+chunk; OpenAI uses one native multi-input request.
+
+## FAISS vector storage
+
+FAISS is a library for efficient similarity search over numeric vectors. This
+project uses `faiss.IndexFlatIP`, an exact, non-approximate index that ranks
+vectors by inner product. When document and query embeddings are normalized,
+inner product is equivalent to cosine similarity. The vector store deliberately
+does not normalize vectors itself.
+
+`FAISSVectorStore.add_chunks()` converts embeddings to NumPy `float32` rows and
+adds them to FAISS. A parallel in-memory list keeps each FAISS row position
+mapped to its complete `EmbeddedChunk`. Searching converts the query to the
+same representation, asks FAISS for the top `k` row positions, and returns the
+mapped chunks with their scores and one-based ranks.
+
+```python
+from enterprise_multi_agent_rag.retrieval import FAISSVectorStore
+
+store = FAISSVectorStore()
+store.add_chunks(embedded_chunks)
+results = store.search(query_embedding, k=5)
+
+store.save("vector_store")
+restored_store = FAISSVectorStore.load("vector_store")
+```
+
+Saving writes the native index to `vector_store/index.faiss` and the ordered
+chunk mapping to `vector_store/chunks.json`. Loading reconstructs both without
+regenerating embeddings and validates their row counts and dimensions. Document
+and query vectors must come from the same embedding model with the same
+dimension and normalization settings; otherwise their similarity scores are
+not meaningful.
+
+## Retriever
+
+`Retriever` accepts a natural-language question, embeds it once with the
+configured embedding provider, searches `FAISSVectorStore`, and returns the
+top-k `SearchResult` objects in ranking order.
+
+```python
+from enterprise_multi_agent_rag.retrieval import Retriever
+
+retriever = Retriever(provider, restored_store)
+results = retriever.retrieve("How many vacation days do employees get?", k=5)
+```
+
+The retriever coordinates embedding and search only; it does not generate a
+final answer, rewrite the query, rerank results, or format citations. Stored
+document chunks and questions must use the same embedding model, dimensions,
+and normalization configuration.
 
 ## Planned technology
 
