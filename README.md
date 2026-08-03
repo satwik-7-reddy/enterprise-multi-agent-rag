@@ -67,16 +67,66 @@ environment. Never commit `.env`.
 Run the API:
 
 ```bash
-uvicorn enterprise_multi_agent_rag.main:app --reload
+uvicorn enterprise_multi_agent_rag.main:app --app-dir src --reload
 ```
 
 Check health at `GET http://127.0.0.1:8000/health`.
+
+### Query API and Swagger UI
+
+Open `http://localhost:8000/docs` after starting the API. Expand `POST /query`,
+select **Try it out**, and submit a request such as:
+
+```json
+{
+  "question": "How many vacation days do employees receive?",
+  "k": 5
+}
+```
+
+The response contains the original question and generated answer:
+
+```json
+{
+  "question": "How many vacation days do employees receive?",
+  "answer": "Employees receive 20 vacation days."
+}
+```
 
 Run tests:
 
 ```bash
 pytest
 ```
+
+## Building the Knowledge Base
+
+`DocumentIndexingService` connects the existing loader, chunker, embedding
+service, and FAISS store. After constructing it with those components, index
+one document:
+
+```python
+indexing_service.index_document("documents/employee_handbook.pdf")
+```
+
+Or index several documents into the same store:
+
+```python
+indexing_service.index_documents([
+    "documents/handbook.pdf",
+    "documents/hr_policy.md",
+])
+```
+
+Both workflows create the searchable knowledge base in `vector_store/`:
+
+```text
+vector_store/
+    index.faiss
+    chunks.json
+```
+
+These files must exist before the query API can search indexed documents.
 
 ## Document ingestion
 
