@@ -326,6 +326,80 @@ Errors from the retriever, prompt builder, or LLM service propagate unchanged
 to the caller. No citations, memory, reranking, query rewriting, or answer
 post-processing are added by this coordinator.
 
+## LangChain Runnable RAG Chain
+
+The original `RAGService` coordinates retrieval, prompt building, and generation
+with normal Python calls. `LangChainRAGChain` expresses that same fixed, linear
+workflow with LangChain Runnables. `RunnableLambda` wraps each existing Python
+operation, and the `|` operator connects the steps so each output becomes the
+next step's input:
+
+```text
+Input
+  ↓
+Retrieve Runnable
+  ↓
+Prompt Runnable
+  ↓
+Generation Runnable
+  ↓
+Answer
+```
+
+```python
+from enterprise_multi_agent_rag.chains import LangChainRAGChain
+
+chain = LangChainRAGChain(
+    retriever=retriever,
+    prompt_builder=prompt_builder,
+    llm_service=llm_service,
+)
+answer = chain.invoke(
+    "How many vacation days do employees receive?",
+    k=5,
+)
+```
+
+This chain adds no new retrieval, prompting, or generation logic. LangGraph can
+later add state, branching, loops, and multi-agent coordination when those
+capabilities are needed.
+
+## LangGraph RAG Workflow
+
+LangChain expresses the RAG process as a runnable sequence. LangGraph expresses
+the same process as nodes and edges operating over shared `RAGState`. Each node
+calls one existing component and updates only its part of the state:
+
+```text
+START
+  ↓
+Retrieve Node
+  ↓
+Prompt Node
+  ↓
+Generate Node
+  ↓
+END
+```
+
+```python
+from enterprise_multi_agent_rag.graph import LangGraphRAGWorkflow
+
+workflow = LangGraphRAGWorkflow(
+    retriever,
+    prompt_builder,
+    llm_service,
+)
+answer = workflow.run(
+    "How many vacation days are provided?",
+    k=5,
+)
+```
+
+This first graph remains linear: it has no agents, branching, loops, tools, or
+memory. Future milestones can add Planner, Researcher, Tool, and Critic agents
+with branching and loops.
+
 ## Planned technology
 
 LangChain, LangGraph, OpenAI, Anthropic Claude, Amazon Bedrock, FastAPI, FAISS,
